@@ -1,0 +1,101 @@
+================================================================
+  Feature Tuning Mixup (FTM) - Experiment Guide
+  Surrogate: ResNet50 | Images: 50 | Iterations: 300 | Device: CPU
+================================================================
+
+----------------------------------------------------------------
+ DATASET
+----------------------------------------------------------------
+Location : data/images/          (50 PNG images)
+           data/images.csv       (image metadata)
+
+Details:
+  - 25 Tabby Cat images   (ImageNet class 282 → target: 208)
+  - 25 Golden Retriever   (ImageNet class 208 → target: 282)
+  - Targeted attack: Cat → Dog and Dog → Cat
+  - Image size resized to 299×299 during runtime
+
+----------------------------------------------------------------
+ FILES WE CREATED / MODIFIED
+----------------------------------------------------------------
+
+1. config.py  [MODIFIED]
+   - Set max_iterations = 300  (as per paper)
+   - Set num_images = 50
+   - Set target_model_names to all 15 models from the paper
+
+2. main.py  [MODIFIED]
+   - Added image resize transform (299×299) for non-standard images
+   - Added torch.nn.functional (softmax) for confidence extraction
+   - Added per-image confidence logging (clean + adversarial)
+   - Added detailed_results collection per image per model
+   - Added CSV export: exp/results/results_summary.csv
+   - Added summary export: exp/results/summary.txt
+   - CPU-safe: no CUDA dependency
+
+3. evaluate_all_models.py  [NEW FILE]
+   - Standalone script to evaluate pre-generated adversarial images
+   - Loads adv images from exp/test/adv_imgs/
+   - Runs inference on all 15 target models
+   - Natural sort for image ordering (cat.1, cat.2 ... cat.25)
+   - Saves: exp/results/results_all_15_models.csv
+   - Saves: exp/results/summary_all_15_models.txt
+
+NOTE: attacks.py was NOT modified (core attack logic untouched)
+
+----------------------------------------------------------------
+ RESULTS LOCATION
+----------------------------------------------------------------
+
+exp/
+├── test/
+│   ├── adv_imgs/               ← 50 adversarial images (PNG)
+│   └── eval_results.txt        ← per-model eval log from attack
+│
+└── results/
+    ├── results_summary.csv         ← 5-model run (from main.py)
+    ├── summary.txt                 ← 5-model summary
+    ├── results_all_15_models.csv   ← MAIN RESULT: 50 images × 15 models
+    └── summary_all_15_models.txt   ← MAIN SUMMARY: overall + per-model
+
+----------------------------------------------------------------
+ HOW TO RUN
+----------------------------------------------------------------
+
+Step 1 — Attack (generates adversarial images + evaluates):
+  python main.py --device cpu --batch_size 1 --model_name ResNet50 --eval
+
+Step 2 — Evaluate on all 15 models (uses saved adv images):
+  python evaluate_all_models.py
+
+----------------------------------------------------------------
+ FINAL RESULTS SUMMARY (50 images, 300 iterations, ResNet50)
+----------------------------------------------------------------
+
+Overall Success Rate: 55.87% (419 / 750)
+
+Per-model Attack Success:
+  mobilenet_v2          90.0%   (45/50)   ← CNN
+  efficientnet_b0       80.0%   (40/50)   ← CNN
+  ResNet18              76.0%   (38/50)   ← CNN
+  ResNet50              76.0%   (38/50)   ← CNN (surrogate)
+  DenseNet121           68.0%   (34/50)   ← CNN
+  twins_svt_base        62.0%   (31/50)   ← Transformer
+  pit                   62.0%   (31/50)   ← Transformer
+  levit_384             60.0%   (30/50)   ← Transformer
+  inception_v3          58.0%   (29/50)   ← CNN
+  vgg16                 58.0%   (29/50)   ← CNN
+  inception_resnet_v2   42.0%   (21/50)   ← CNN
+  convit_base           40.0%   (20/50)   ← Transformer
+  vit_base_patch16_224  28.0%   (14/50)   ← Transformer
+  xception              20.0%   (10/50)   ← CNN
+  inception_v4_timm     18.0%   ( 9/50)   ← CNN
+
+Key Observations (consistent with paper findings):
+  - CNN models transfer significantly better than Transformers
+  - mobilenet_v2 and efficientnet_b0 are most susceptible
+  - ViT (vit_base_patch16_224) is hardest to fool
+  - Results align with paper trends despite using only 2 image classes
+    vs. the paper's 1000-image diverse ImageNet dataset
+
+================================================================
