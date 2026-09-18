@@ -5,7 +5,7 @@ exp_configuration = {
         'epsilon': 16,
         'alpha': 2,
         'max_iterations': 300,
-        'num_images': 50,
+        'num_images': 1000,
         'p': 1.,  # prob for DI
 
         # 'source_model_names':['ResNet50','inception_v3','DenseNet121','levit_384'],

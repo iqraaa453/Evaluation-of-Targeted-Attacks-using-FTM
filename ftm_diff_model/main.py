@@ -166,8 +166,8 @@ def main(args):
                 f.write(str(eval_result) + "\n")
         print(f"Evaluation results saved to {eval_results_path}")
 
-        # Save detailed CSV and summary
-        results_dir = os.path.join("exp", "results")
+        # Save detailed CSV and summary with this run's outputs.
+        results_dir = os.path.join(args.save_dir, "results")
         os.makedirs(results_dir, exist_ok=True)
 
         csv_path = os.path.join(results_dir, "results_summary.csv")
@@ -183,6 +183,21 @@ def main(args):
         total = len(detailed_results)
         successes = sum(r['Success'] for r in detailed_results)
         overall_rate = successes / total * 100 if total > 0 else 0.0
+
+        modelwise_path = os.path.join(results_dir, "model_wise_summary.csv")
+        with open(modelwise_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                'ModelName', 'SuccessSamples', 'TotalSamples', 'SuccessRate'
+            ])
+            writer.writeheader()
+            for eval_result in eval_results:
+                writer.writerow({
+                    'ModelName': eval_result.model_name,
+                    'SuccessSamples': eval_result.success_samples,
+                    'TotalSamples': eval_result.total_samples,
+                    'SuccessRate': f"{eval_result.success_rate:.2f}",
+                })
+        print(f"Model-wise summary saved to {modelwise_path}")
 
         summary_path = os.path.join(results_dir, "summary.txt")
         with open(summary_path, "w") as f:

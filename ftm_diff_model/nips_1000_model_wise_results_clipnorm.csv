@@ -1,0 +1,17 @@
+Target model,ResNet50,ConvNeXt,CLIP RN50
+ResNet18,87.0%,51.2%,8.8%
+ResNet50,97.7%,57.0%,9.4%
+vgg16,85.4%,38.5%,13.3%
+inception_v3,68.3%,37.6%,6.9%
+efficientnet_b0,81.5%,65.0%,10.1%
+DenseNet121,89.7%,60.5%,11.0%
+mobilenet_v2,82.9%,44.7%,7.8%
+inception_resnet_v2,52.6%,34.8%,5.2%
+inception_v4_timm,65.3%,32.8%,7.8%
+xception,56.8%,34.8%,7.9%
+vit_base_patch16_224,13.2%,46.8%,1.1%
+levit_384,52.3%,79.1%,6.2%
+convit_base,10.8%,46.5%,0.1%
+twins_svt_base,30.9%,69.9%,2.1%
+pit,31.4%,64.8%,1.1%
+Overall average,62.39%,53.60%,6.59%
