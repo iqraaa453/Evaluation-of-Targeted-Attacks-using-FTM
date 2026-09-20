@@ -18,13 +18,14 @@ except ImportError:
 
 # Simple wrapper model to normalize an input image
 class WrapperModel(nn.Module):
-    def __init__(self, model, mean, std, resize=False, channels=3):
+    def __init__(self, model, mean, std, resize=False, channels=3, target_res=224):
         super(WrapperModel, self).__init__()
         self.mean = torch.Tensor(mean)
         self.std = torch.Tensor(std)
         self.model = model
         self.resize = resize
         self.channels = channels
+        self.target_res = target_res
 
     def forward(self, x):
         if self.channels == 1 and x.shape[1] == 3:
@@ -36,8 +37,8 @@ class WrapperModel(nn.Module):
             x = x.repeat(1, 3, 1, 1)
         
         if self.resize:
-            # Medical models strictly require 224x224
-            x = transforms.Resize((224, 224), interpolation=InterpolationMode.NEAREST)(x)
+            # Resize to model's native resolution
+            x = transforms.Resize((self.target_res, self.target_res), interpolation=InterpolationMode.BILINEAR)(x)
         
         # Normalization logic: (input - mean) / std
         x_norm = (x - self.mean.type_as(x)[None, :, None, None]) / self.std.type_as(x)[None, :, None, None]
@@ -45,7 +46,7 @@ class WrapperModel(nn.Module):
 
     def normalize(self, x):
         if self.resize:
-            x = transforms.Resize((224, 224), interpolation=InterpolationMode.NEAREST)(x)
+            x = transforms.Resize((self.target_res, self.target_res), interpolation=InterpolationMode.BILINEAR)(x)
         return (x - self.mean.type_as(x)[None, :, None, None]) / self.std.type_as(x)[None, :, None, None]
 
 

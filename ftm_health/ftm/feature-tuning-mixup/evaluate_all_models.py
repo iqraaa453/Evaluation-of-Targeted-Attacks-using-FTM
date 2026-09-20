@@ -3,6 +3,7 @@ Evaluate pre-generated adversarial images against medical (XRV) target models.
 Loads adversarial .pt tensors (if available) or PNG images from exp/medical_results/adv_imgs/
 and clean images from data/images/.
 Saves detailed CSV and summary to exp/results/.
+Uses native resolution per model (consistent with main.py).
 """
 
 import os
@@ -13,6 +14,7 @@ from datetime import datetime
 import torch
 import torch.nn.functional as F
 from torchvision import transforms
+from torchvision.transforms import InterpolationMode
 from PIL import Image
 
 # Ensure these are imported from your updated utils.py
@@ -23,26 +25,37 @@ ADV_DIR = "./exp/medical_results/adv_imgs"
 CLEAN_DIR = "./data/images/images-224"
 CSV_FILE = "./data/images/images-224.csv"
 RESULTS_DIR = "./exp/results"
-IMG_SIZE = 224  # Must match the img_size used during attack generation in main.py
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Updated to Medical-Specific Target Models
-ALL_TARGET_MODELS = [
-    'xrv_chexnet',        # Surrogate model - verify attack works on it
-    'DenseNet121',        # Standard ImageNet version (for cross-domain transfer test)
-    'ResNet50',           # Standard ImageNet version
-    'vit_base_patch16_224'# Transformer-based ImageNet model
-]
+# Native resolution per model (must match main.py)
+NATIVE_RESOLUTION = {
+    'xrv_chexnet': 224,
+    'xrv_densenet_nih': 224,
+    'xrv_densenet_chex': 224,
+    'xrv_densenet_pc': 224,
+    'xrv_resnet50': 512,
+    'ResNet50': 224,
+    'DenseNet121': 224,
+    'vit_base_patch16_224': 224,
+    'efficientnet_b0': 224,
+}
+DEFAULT_NATIVE_RES = 224
 
-# Models that strictly require 224x224 or XRV processing
-SMALL_SIZED_MODELS = ['vit_base_patch16_224', 'xrv_chexnet', 'xrv_densenet_nih', 'xrv_densenet_chex', 'xrv_densenet_pc']
+# Paper's Medical Target Models (Table III)
+ALL_TARGET_MODELS = [
+    'xrv_chexnet',        # Surrogate (white-box)
+    'xrv_densenet_nih',   # DenseNet121 - NIH
+    'xrv_densenet_chex',  # DenseNet121 - CheXpert
+    'xrv_densenet_pc',    # DenseNet121 - PadChest
+    'xrv_resnet50',       # ResNet50 - Medical (512x512)
+]
 
 MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
 
 # For XRV models (grayscale) - matching main.py
 MEAN_XRV = [0.5]
-STD_XRV = [0.5]
+STD_XRV = [1.0 / 2048.0]
 
 
 def main():
@@ -80,13 +93,10 @@ def main():
     all_adv_ids = set(adv_map.keys()) | set(adv_pt_map.keys())
     print(f"Mapped {len(all_adv_ids)} adversarial images ({len(adv_pt_map)} .pt, {len(adv_map)} .png)")
 
-    # Transforms
-    trn = transforms.Compose([
-        transforms.Resize((IMG_SIZE, IMG_SIZE)),
-        transforms.ToTensor(),
-    ])
+    # Transform: only ToTensor, no resize (WrapperModel handles per-model resize)
+    trn = transforms.Compose([transforms.ToTensor()])
 
-    # Pre-load all clean and adversarial images
+    # Pre-load all clean and adversarial images at ORIGINAL resolution
     print("Loading images into memory...")
     clean_imgs = []
     adv_imgs = []
@@ -97,8 +107,10 @@ def main():
             continue
         clean_path = os.path.join(CLEAN_DIR, img_id + ".png")
 
-        # Load clean image as RGB (WrapperModel handles channel conversion)
-        clean_imgs.append(trn(Image.open(clean_path).convert('RGB')).unsqueeze(0))
+        # Load clean image at original resolution
+        raw_img = Image.open(clean_path)
+        # WrapperModel handles channel conversion (RGB<->grayscale)
+        clean_imgs.append(trn(raw_img.convert('RGB')).unsqueeze(0))
 
         # Prefer lossless .pt tensor; fall back to PNG
         if img_id in adv_pt_map:
@@ -108,7 +120,8 @@ def main():
             adv_imgs.append(adv_tensor)
         else:
             adv_path = os.path.join(ADV_DIR, adv_map[img_id])
-            adv_imgs.append(trn(Image.open(adv_path).convert('RGB')).unsqueeze(0))
+            raw_adv = Image.open(adv_path)
+            adv_imgs.append(trn(raw_adv.convert('RGB')).unsqueeze(0))
 
         target_labels.append(label_tar_list[i])
         evaluated_image_ids.append(img_id)
@@ -140,10 +153,12 @@ def main():
             mean = MEAN
             std = STD
             channels = 3
-        is_small = model_name in SMALL_SIZED_MODELS or is_xrv
+        
+        # Get model's native resolution
+        target_res = NATIVE_RESOLUTION.get(model_name, DEFAULT_NATIVE_RES)
 
         try:
-            model = WrapperModel(base_model, mean, std, resize=is_small, channels=channels).to(DEVICE)
+            model = WrapperModel(base_model, mean, std, resize=True, channels=channels, target_res=target_res).to(DEVICE)
             model.eval()
         except Exception as e:
             print(f"  ! SKIPPING {model_name} (wrapper init failed): {e}")
